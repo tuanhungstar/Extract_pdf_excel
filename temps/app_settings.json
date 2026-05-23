@@ -1,0 +1,37 @@
+{
+    "input_folder": "D:/extract_project/pdf_folder",
+    "output_folder": "D:/extract_project/output",
+    "ai_engine": "GPT (OpenAI)",
+    "gemini_api_key": "",
+    "gpt_api_key": "",
+    "local_api_url": "http://api-localai.germantest.net",
+    "gemini_model": "gemini-2.5-flash",
+    "gpt_model": "gpt-4o-mini",
+    "local_model": "qwen2.5vl:3b",
+    "batch_limit": "5 Files",
+    "inter_file_delay": 20,
+    "model_fail_delay": 60,
+    "model_fail_attempts": 3,
+    "custom_prompt": "please extract header and item infromation from this file and put in json format. return only json without any additional text\nthis json template is your reference only. json should content actual extracted data\n\n{\n  \"header\": {\n    \"annex_no\": \"content of annex_no\",\n    \"contract_date\": \"content of contract_date\"\n  },\n  \"items\": [\n    {\n      \"no\": \"content of item1 no\",\n      \"style_no\": \"content of item1 style_no\",\n      \"buyer_style_no\": \"content of item1 buyer_style_no\",\n      \"style_name\": \"content of item1 style_name\",\n      \"po_no\": \"content of item1 po_no\",\n      \"color\": \"content of item1 color\",\n      \"material_in_house\": \"content of item1 material_in_house\",\n      \"delivery_date\": \"content of item1 delivery_date\",\n      \"quantity_pc\": \"content of item1 quantity_pc\",\n      \"fob_price_usd\": \"content of item1 fob_price_usd\",\n      \"fob_amount_usd\": \"content of item1 fob_amount_usd\"\n    }\n  ],\n  \"other infor\": {}\n}",
+    "selected_columns": [],
+    "selected_schema": {
+        "header": [
+            "annex_no",
+            "contract_date"
+        ],
+        "items": [
+            "no",
+            "style_no",
+            "buyer_style_no",
+            "style_name",
+            "po_no",
+            "color",
+            "material_in_house",
+            "delivery_date",
+            "quantity_pc",
+            "fob_price_usd",
+            "fob_amount_usd"
+        ],
+        "other infor": []
+    }
+}
