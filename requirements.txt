@@ -1,0 +1,8 @@
+openpyxl
+pandas
+PyQt6
+google-genai
+google-auth
+requests
+pypdf
+PyMuPDF
