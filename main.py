@@ -499,7 +499,8 @@ class ConversionWorker(QThread):
                  is_schema_discovery: bool = False,
                  selected_schema: Optional[Dict[str, List[str]]] = None,
                  fail_attempts: int = 3,
-                 fail_delay: int = 5):
+                 fail_delay: int = 5,
+                 discover_all_pages: bool = False):
         super().__init__()
         self.files = files
         self.ai_engine = ai_engine
@@ -512,6 +513,7 @@ class ConversionWorker(QThread):
         self.selected_schema = selected_schema
         self.fail_attempts = fail_attempts
         self.fail_delay = fail_delay
+        self.discover_all_pages = discover_all_pages
         
         self.is_running = True
 
@@ -535,14 +537,49 @@ class ConversionWorker(QThread):
         self.log_signal.emit(f"🚀 COMMENCING SCHEMA DISCOVERY ON: {os.path.basename(file_path)}")
         self.progress_signal.emit(10, "Extracting page schema...")
 
+        temp_split_path = None
+        actual_pdf_path = file_path
+        if not self.discover_all_pages:
+            try:
+                doc = fitz.open(file_path)
+                if len(doc) > 1:
+                    new_doc = fitz.open()
+                    new_doc.insert_pdf(doc, from_page=0, to_page=0)
+                    temp_split_path = os.path.join(TEMP_DIR, f"discover_page1_{os.path.basename(file_path)}")
+                    new_doc.save(temp_split_path)
+                    new_doc.close()
+                    actual_pdf_path = temp_split_path
+                    self.log_signal.emit("📄 Multi-page PDF detected; running Schema Discovery on the first page only.")
+                doc.close()
+            except Exception as e:
+                self.log_signal.emit(f"⚠️ Failed to extract first page, falling back to all pages. Error: {e}")
+
         try:
             # Execute conversion on single file
-            json_response = self._process_single_pdf_to_json(file_path)
+            json_response = self._process_single_pdf_to_json(actual_pdf_path)
+            if isinstance(json_response, list):
+                if len(json_response) == 1 and isinstance(json_response[0], dict) and ("items" in json_response[0] or "header" in json_response[0]):
+                    json_response = json_response[0]
+                else:
+                    json_response = {
+                        "header": {},
+                        "items": json_response,
+                        "other infor": {}
+                    }
+            elif not isinstance(json_response, dict):
+                json_response = {}
             self.schema_discovered_signal.emit(json_response)
             self.batch_finished_signal.emit(True, "Schema discovery completed successfully.")
         except Exception as e:
             self.log_signal.emit(f"❌ Schema Discovery Failed: {e}")
             self.batch_finished_signal.emit(False, f"Schema Discovery Failed: {str(e)}")
+        finally:
+            if temp_split_path and os.path.exists(temp_split_path):
+                try:
+                    os.remove(temp_split_path)
+                    self.log_signal.emit("🧹 Cleaned up temporary first-page PDF.")
+                except Exception as cleanup_err:
+                    self.log_signal.emit(f"⚠️ Failed to delete temporary file {temp_split_path}: {cleanup_err}")
 
     def run_batch_conversion(self):
         """Executes full batch translation of files."""
@@ -1188,6 +1225,11 @@ class MainWindow(QMainWindow):
         self.prompt_text_edit.setAcceptRichText(False)
         config_vlayout.addWidget(self.prompt_text_edit)
         
+        # Checkbox for Schema Discovery Page Range
+        self.cb_discover_all_pages = QCheckBox("Discover all pages (unchecked = first page only)")
+        self.cb_discover_all_pages.setStyleSheet("color: #D1D5DB; font-size: 11px; margin-bottom: 4px;")
+        config_vlayout.addWidget(self.cb_discover_all_pages)
+        
         # Action Buttons
         btn_action_layout = QHBoxLayout()
         self.btn_discovery = QPushButton("🔍 Discovery Schema (1 File)")
@@ -1356,6 +1398,7 @@ class MainWindow(QMainWindow):
         self.fail_attempts_spin.setValue(self.settings.get("model_fail_attempts", 3))
         self.fail_delay_spin.setValue(self.settings.get("model_fail_delay", 5))
         self.prompt_text_edit.setPlainText(self.settings.get("custom_prompt", ""))
+        self.cb_discover_all_pages.setChecked(self.settings.get("discover_all_pages", False))
         
         # Load schema
         self.selected_schema = self.settings.get("selected_schema", None)
@@ -1395,6 +1438,7 @@ class MainWindow(QMainWindow):
         self.settings["model_fail_delay"] = self.fail_delay_spin.value()
         self.settings["custom_prompt"] = self.prompt_text_edit.toPlainText()
         self.settings["selected_schema"] = self.selected_schema
+        self.settings["discover_all_pages"] = self.cb_discover_all_pages.isChecked()
         
         settings_manager.save_settings(self.settings)
 
@@ -1665,12 +1709,20 @@ class MainWindow(QMainWindow):
             ai_engine=engine,
             api_key=api_val,
             model_name=self.model_selector.currentText(),
-            prompt_text="please extract header and item infromation from this file and put in json format. return only json without any additional text",
+            prompt_text=(
+                "please extract header and item infromation from this document.\n"
+                "Return a structured JSON object with the following keys:\n"
+                "- \"header\": A dictionary of fields that apply to the entire document (e.g., invoice/annex number, contract/document date, supplier/customer details, etc.).\n"
+                "- \"items\": A list of dictionaries representing the rows of any tabular items (e.g., product name, style number, quantity, unit price, total price, color, delivery date, etc.).\n"
+                "- \"other infor\": A dictionary of summary information (e.g., total quantity, total amount, general notes).\n\n"
+                "Return only the raw JSON object, without markdown formatting or code blocks."
+            ),
             output_dir=self.out_folder_le.text(),
             delay=0,
             is_schema_discovery=True,
             fail_attempts=self.fail_attempts_spin.value(),
-            fail_delay=self.fail_delay_spin.value()
+            fail_delay=self.fail_delay_spin.value(),
+            discover_all_pages=self.cb_discover_all_pages.isChecked()
         )
 
         self.active_worker.log_signal.connect(self.add_log)

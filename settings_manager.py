@@ -6,6 +6,10 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "temps", "app_settings.j
 
 DEFAULT_PROMPT = """please extract header and item infromation from this file and put in json format. return only json without any additional text
 this json template is your reference only. json should content actual extracted data
+Note on data formatting:
+
+Date values: format as dd/mm/yyyy
+Numeric values: remove all thousand separators, remove currency symbols and units (e.g. "đ", "VND", "USD",...), use "," as decimal separator (e.g. 1234567,50)
 
 {
   "header": {
@@ -44,7 +48,8 @@ DEFAULT_SETTINGS = {
     "model_fail_attempts": 3,
     "custom_prompt": DEFAULT_PROMPT,
     "selected_columns": [], # Holds last selected schema columns
-    "selected_schema": None
+    "selected_schema": None,
+    "discover_all_pages": False
 }
 
 def load_settings() -> dict:
