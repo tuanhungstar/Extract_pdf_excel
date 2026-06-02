@@ -1,6 +1,9 @@
 # File: main.py
 import sys
 import os
+import urllib.request
+import zipfile
+import shutil
 # Dynamic sys.path expansion to allow embedded python to locate adjacent scripts
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import time
@@ -558,6 +561,85 @@ class StandardPromptDialog(QDialog):
 
     def get_prompt(self) -> str:
         return self.prompt_edit.toPlainText()
+
+
+class AppUpdaterWorker(QThread):
+    log_signal = pyqtSignal(str)
+    progress_signal = pyqtSignal(int)
+    finished_signal = pyqtSignal(bool, str)
+
+    def __init__(self, target_dir: str):
+        super().__init__()
+        self.target_dir = target_dir
+
+    def run(self):
+        zip_url = "https://github.com/tuanhungstar/Extract_pdf_excel/archive/refs/heads/main.zip"
+        temp_zip_path = os.path.join(self.target_dir, "temps", "update.zip")
+        temp_extract_dir = os.path.join(self.target_dir, "temps", "update_extracted")
+
+        try:
+            self.log_signal.emit("Downloading update from GitHub...")
+            self.progress_signal.emit(20)
+            
+            # Make sure temps directory exists
+            os.makedirs(os.path.dirname(temp_zip_path), exist_ok=True)
+            
+            # Clean up old extraction directory if exists
+            if os.path.exists(temp_extract_dir):
+                shutil.rmtree(temp_extract_dir)
+            os.makedirs(temp_extract_dir, exist_ok=True)
+
+            # Download zip
+            headers = {"User-Agent": "Mozilla/5.0"}
+            req = urllib.request.Request(zip_url, headers=headers)
+            with urllib.request.urlopen(req) as response, open(temp_zip_path, 'wb') as out_file:
+                shutil.copyfileobj(response, out_file)
+                
+            self.log_signal.emit("Download complete. Extracting files...")
+            self.progress_signal.emit(50)
+
+            # Extract zip
+            with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_extract_dir)
+
+            self.log_signal.emit("Applying updates to application folder...")
+            self.progress_signal.emit(80)
+
+            # Find the root folder inside the zip (usually Extract_pdf_excel-main)
+            extracted_items = os.listdir(temp_extract_dir)
+            if not extracted_items:
+                raise Exception("Extracted archive is empty")
+            
+            root_extracted_folder = os.path.join(temp_extract_dir, extracted_items[0])
+            if not os.path.isdir(root_extracted_folder):
+                raise Exception("Archive does not contain a root folder")
+
+            # Copy files from extracted root folder to the app directory
+            for item in os.listdir(root_extracted_folder):
+                s = os.path.join(root_extracted_folder, item)
+                d = os.path.join(self.target_dir, item)
+                
+                # Skip copy of backups, settings files, and temp folder to avoid loss of settings/logs/backups
+                if item in ["backup", "temps", ".env", "app_settings.json"]:
+                    continue
+                    
+                if os.path.isdir(s):
+                    if os.path.exists(d):
+                        shutil.rmtree(d)
+                    shutil.copytree(s, d)
+                else:
+                    shutil.copy2(s, d)
+
+            # Cleanup
+            if os.path.exists(temp_zip_path):
+                os.remove(temp_zip_path)
+            shutil.rmtree(temp_extract_dir)
+
+            self.progress_signal.emit(100)
+            self.finished_signal.emit(True, "App successfully updated to the latest version on GitHub.")
+            
+        except Exception as e:
+            self.finished_signal.emit(False, str(e))
 
 
 # --- Thread Worker for Async AI Batch Operations ---
@@ -1334,14 +1416,17 @@ class MainWindow(QMainWindow):
         btn_action_layout.addWidget(self.btn_convert)
         config_vlayout.addLayout(btn_action_layout)
         
-        # Config Save/Load Buttons
+        # Config Save/Load/Update Buttons
         config_file_layout = QHBoxLayout()
         self.btn_save_config = QPushButton("💾 Save Config")
         self.btn_load_config = QPushButton("📂 Load Config")
+        self.btn_update_app = QPushButton("🔄 Update App")
         self.btn_save_config.setStyleSheet("background-color: #2E2A47; border-color: #4C3F75; color: #C0B7E5; font-weight: bold;")
         self.btn_load_config.setStyleSheet("background-color: #2E2A47; border-color: #4C3F75; color: #C0B7E5; font-weight: bold;")
+        self.btn_update_app.setStyleSheet("background-color: #1E3A8A; border-color: #3B82F6; color: #93C5FD; font-weight: bold;")
         config_file_layout.addWidget(self.btn_save_config)
         config_file_layout.addWidget(self.btn_load_config)
+        config_file_layout.addWidget(self.btn_update_app)
         config_vlayout.addLayout(config_file_layout)
         
         # Progress Bar and Status State
@@ -1445,6 +1530,7 @@ class MainWindow(QMainWindow):
         self.btn_convert.clicked.connect(self._run_batch_conversion)
         self.btn_save_config.clicked.connect(self._on_save_config_clicked)
         self.btn_load_config.clicked.connect(self._on_load_config_clicked)
+        self.btn_update_app.clicked.connect(self._run_app_update)
         self.btn_refresh_xlsx.clicked.connect(self._scan_output_folder)
         self.btn_delete_xlsx.clicked.connect(self._delete_xlsx_file)
         self.btn_check_xlsx.clicked.connect(self._check_xlsx_schema)
@@ -1757,6 +1843,7 @@ class MainWindow(QMainWindow):
         self.prompt_text_edit.setEnabled(active)
         self.btn_edit_discovery_prompt.setEnabled(active)
         self.btn_edit_standard_prompt.setEnabled(active)
+        self.btn_update_app.setEnabled(active)
         self.btn_discovery.setEnabled(active)
         
         if not active:
@@ -2062,6 +2149,49 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.add_log(f"Failed to load config: {e}")
                 QMessageBox.critical(self, "Load Error", f"Failed to load configuration:\n{e}")
+
+    def _run_app_update(self):
+        reply = QMessageBox.question(
+            self,
+            "Confirm Update",
+            "Are you sure you want to download and apply updates from GitHub?\nThis will overwrite the application files.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self.set_gui_active(False, "Updating Application...")
+        self.progress_bar.setValue(10)
+        self.add_log("Starting application update...")
+
+        # Target directory is the directory containing main.py
+        target_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        self.update_worker = AppUpdaterWorker(target_dir)
+        self.update_worker.log_signal.connect(self.add_log)
+        self.update_worker.progress_signal.connect(self.progress_bar.setValue)
+        self.update_worker.finished_signal.connect(self._on_update_finished)
+        self.update_worker.start()
+
+    def _on_update_finished(self, success: bool, msg: str):
+        self.set_gui_active(True, "System Idle")
+        if success:
+            self.progress_bar.setValue(100)
+            self.add_log("Update finished successfully.")
+            QMessageBox.information(
+                self,
+                "Update Successful",
+                f"✅ {msg}\n\nPlease restart the application to apply the updates."
+            )
+        else:
+            self.progress_bar.setValue(0)
+            self.add_log(f"Update failed: {msg}")
+            QMessageBox.critical(
+                self,
+                "Update Failed",
+                f"❌ Failed to update the application:\n{msg}"
+            )
 
     def _delete_xlsx_file(self):
         selected_indexes = self.xlsx_list_widget.selectedIndexes()
