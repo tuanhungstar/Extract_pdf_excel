@@ -480,6 +480,86 @@ class ExcelViewerDialog(QDialog):
             self.info_label.setText(f"Error loading sheet '{sheet_name}': {e}")
 
 
+class DiscoveryPromptDialog(QDialog):
+    def __init__(self, prompt_text: str, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Schema Discovery Prompt")
+        self.setMinimumSize(600, 450)
+        self.prompt_text = prompt_text
+        self._init_ui()
+
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+        
+        title = QLabel("Modify Schema Discovery Prompt Template:")
+        title.setFont(QFont("Inter", 11, QFont.Weight.Bold))
+        title.setStyleSheet("color: #F3F4F6; margin-bottom: 8px;")
+        layout.addWidget(title)
+        
+        self.prompt_edit = QTextEdit()
+        self.prompt_edit.setAcceptRichText(False)
+        self.prompt_edit.setPlainText(self.prompt_text)
+        self.prompt_edit.setStyleSheet("background-color: #1A1A1E; color: #E5E7EB; border: 1px solid #374151; font-family: monospace; font-size: 12px; padding: 6px;")
+        layout.addWidget(self.prompt_edit)
+        
+        buttons_layout = QHBoxLayout()
+        self.btn_save = QPushButton("💾 Save Changes")
+        self.btn_cancel = QPushButton("❌ Cancel")
+        
+        self.btn_save.setStyleSheet("background-color: #10B981; color: white; font-weight: bold; padding: 6px 12px;")
+        self.btn_cancel.setStyleSheet("background-color: #4B5563; color: white; padding: 6px 12px;")
+        
+        buttons_layout.addWidget(self.btn_save)
+        buttons_layout.addWidget(self.btn_cancel)
+        layout.addLayout(buttons_layout)
+        
+        self.btn_save.clicked.connect(self.accept)
+        self.btn_cancel.clicked.connect(self.reject)
+
+    def get_prompt(self) -> str:
+        return self.prompt_edit.toPlainText()
+
+
+class StandardPromptDialog(QDialog):
+    def __init__(self, prompt_text: str, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Standard Prompt Template")
+        self.setMinimumSize(650, 500)
+        self.prompt_text = prompt_text
+        self._init_ui()
+
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+        
+        title = QLabel("Modify Base Standard Prompt Template:")
+        title.setFont(QFont("Inter", 11, QFont.Weight.Bold))
+        title.setStyleSheet("color: #F3F4F6; margin-bottom: 8px;")
+        layout.addWidget(title)
+        
+        self.prompt_edit = QTextEdit()
+        self.prompt_edit.setAcceptRichText(False)
+        self.prompt_edit.setPlainText(self.prompt_text)
+        self.prompt_edit.setStyleSheet("background-color: #1A1A1E; color: #E5E7EB; border: 1px solid #374151; font-family: monospace; font-size: 12px; padding: 6px;")
+        layout.addWidget(self.prompt_edit)
+        
+        buttons_layout = QHBoxLayout()
+        self.btn_save = QPushButton("💾 Save Changes")
+        self.btn_cancel = QPushButton("❌ Cancel")
+        
+        self.btn_save.setStyleSheet("background-color: #10B981; color: white; font-weight: bold; padding: 6px 12px;")
+        self.btn_cancel.setStyleSheet("background-color: #4B5563; color: white; padding: 6px 12px;")
+        
+        buttons_layout.addWidget(self.btn_save)
+        buttons_layout.addWidget(self.btn_cancel)
+        layout.addLayout(buttons_layout)
+        
+        self.btn_save.clicked.connect(self.accept)
+        self.btn_cancel.clicked.connect(self.reject)
+
+    def get_prompt(self) -> str:
+        return self.prompt_edit.toPlainText()
+
+
 # --- Thread Worker for Async AI Batch Operations ---
 class ConversionWorker(QThread):
     log_signal = pyqtSignal(str)
@@ -945,8 +1025,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("AI PDF-to-Excel Vision Extraction Engine")
-        self.setMinimumSize(1400, 850)
-        self.resize(1400, 850)
+        self.setMinimumSize(1400, 950)
+        self.resize(1400, 950)
         
         # Properties
         self.settings = settings_manager.load_settings()
@@ -1218,6 +1298,18 @@ class MainWindow(QMainWindow):
         
         config_vlayout.addLayout(grid_config)
         
+        # Discovery and Standard Prompt Customization Buttons
+        prompt_buttons_layout = QHBoxLayout()
+        self.btn_edit_discovery_prompt = QPushButton("📝 Edit Discovery Prompt")
+        self.btn_edit_discovery_prompt.setStyleSheet("background-color: #242526; border-color: #3C3D3E; color: #E5E7EB; font-weight: bold; padding: 6px;")
+        
+        self.btn_edit_standard_prompt = QPushButton("📝 Edit Standard Prompt")
+        self.btn_edit_standard_prompt.setStyleSheet("background-color: #242526; border-color: #3C3D3E; color: #E5E7EB; font-weight: bold; padding: 6px;")
+        
+        prompt_buttons_layout.addWidget(self.btn_edit_discovery_prompt)
+        prompt_buttons_layout.addWidget(self.btn_edit_standard_prompt)
+        config_vlayout.addLayout(prompt_buttons_layout)
+
         # Multiline Prompt Customization Textbox
         config_vlayout.addWidget(QLabel("Data Extraction Prompt Template:"))
         self.prompt_text_edit = QTextEdit()
@@ -1347,6 +1439,8 @@ class MainWindow(QMainWindow):
         self.in_folder_btn.clicked.connect(self._select_input_folder)
         self.out_folder_btn.clicked.connect(self._select_output_folder)
         self.ai_selector.currentIndexChanged.connect(self._on_ai_engine_changed)
+        self.btn_edit_discovery_prompt.clicked.connect(self._open_discovery_prompt_dialog)
+        self.btn_edit_standard_prompt.clicked.connect(self._open_standard_prompt_dialog)
         self.btn_discovery.clicked.connect(self._run_schema_discovery)
         self.btn_convert.clicked.connect(self._run_batch_conversion)
         self.btn_save_config.clicked.connect(self._on_save_config_clicked)
@@ -1661,6 +1755,8 @@ class MainWindow(QMainWindow):
         self.fail_attempts_spin.setEnabled(active)
         self.fail_delay_spin.setEnabled(active)
         self.prompt_text_edit.setEnabled(active)
+        self.btn_edit_discovery_prompt.setEnabled(active)
+        self.btn_edit_standard_prompt.setEnabled(active)
         self.btn_discovery.setEnabled(active)
         
         if not active:
@@ -1673,6 +1769,24 @@ class MainWindow(QMainWindow):
             self.status_text_lbl.setText(text)
             self.btn_convert.setText("⚡ START CONVERSION")
             self.btn_convert.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #A855F7); color: white; border: none; font-weight: bold; padding: 10px;")
+
+    def _open_discovery_prompt_dialog(self):
+        current_prompt = self.settings.get("discovery_prompt", "")
+        dialog = DiscoveryPromptDialog(current_prompt, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_prompt = dialog.get_prompt()
+            self.settings["discovery_prompt"] = new_prompt
+            self._save_active_settings()
+            self.add_log("Schema Discovery Prompt template updated successfully.")
+
+    def _open_standard_prompt_dialog(self):
+        current_prompt = self.settings.get("standard_prompt", settings_manager.DEFAULT_PROMPT)
+        dialog = StandardPromptDialog(current_prompt, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_prompt = dialog.get_prompt()
+            self.settings["standard_prompt"] = new_prompt
+            self._save_active_settings()
+            self.add_log("Standard Prompt template updated successfully.")
 
     # --- Action: Run Schema Column Discovery ---
     def _run_schema_discovery(self):
@@ -1709,14 +1823,7 @@ class MainWindow(QMainWindow):
             ai_engine=engine,
             api_key=api_val,
             model_name=self.model_selector.currentText(),
-            prompt_text=(
-                "please extract header and item infromation from this document.\n"
-                "Return a structured JSON object with the following keys:\n"
-                "- \"header\": A dictionary of fields that apply to the entire document (e.g., invoice/annex number, contract/document date, supplier/customer details, etc.).\n"
-                "- \"items\": A list of dictionaries representing the rows of any tabular items (e.g., product name, style number, quantity, unit price, total price, color, delivery date, etc.).\n"
-                "- \"other infor\": A dictionary of summary information (e.g., total quantity, total amount, general notes).\n\n"
-                "Return only the raw JSON object, without markdown formatting or code blocks."
-            ),
+            prompt_text=self.settings.get("discovery_prompt", ""),
             output_dir=self.out_folder_le.text(),
             delay=0,
             is_schema_discovery=True,
@@ -1780,10 +1887,14 @@ class MainWindow(QMainWindow):
         
         json_formatted = json.dumps(custom_json, indent=2, ensure_ascii=False)
         
-        custom_prompt = f"""please extract header and item infromation from this file and put in json format. return only json without any additional text
-this json template is your reference only. json should content actual extracted data
-
-{json_formatted}"""
+        default_prompt = self.settings.get("standard_prompt", settings_manager.DEFAULT_PROMPT)
+        brace_idx = default_prompt.find("{")
+        if brace_idx != -1:
+            instructions = default_prompt[:brace_idx].strip()
+        else:
+            instructions = default_prompt.strip()
+            
+        custom_prompt = f"{instructions}\n\n{json_formatted}"
         
         self.prompt_text_edit.setPlainText(custom_prompt)
         self._save_active_settings()

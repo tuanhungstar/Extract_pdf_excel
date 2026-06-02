@@ -32,6 +32,14 @@ Numeric values: remove all thousand separators, remove currency symbols and unit
   }
 }"""
 
+DEFAULT_DISCOVERY_PROMPT = """please extract header and item infromation from this document.
+Return a structured JSON object with the following keys:
+- "header": A dictionary of fields that apply to the entire document (e.g., invoice/annex number, contract/document date, supplier/customer details, etc.).
+- "items": A list of dictionaries representing the rows of any tabular items (e.g., product name, style number, quantity, unit price, total price, color, delivery date, etc.).
+- "other infor": A dictionary of summary information (e.g., total quantity, total amount, general notes).
+
+Return only the raw JSON object, without markdown formatting or code blocks."""
+
 DEFAULT_SETTINGS = {
     "input_folder": "",
     "output_folder": "",
@@ -47,6 +55,8 @@ DEFAULT_SETTINGS = {
     "model_fail_delay": 5,
     "model_fail_attempts": 3,
     "custom_prompt": DEFAULT_PROMPT,
+    "discovery_prompt": DEFAULT_DISCOVERY_PROMPT,
+    "standard_prompt": DEFAULT_PROMPT,
     "selected_columns": [], # Holds last selected schema columns
     "selected_schema": None,
     "discover_all_pages": False
